@@ -11,7 +11,18 @@ def main():
     event_dataset = kelvins_to_event_dataset(dataset_path)
 
     features = [
-        '__CREATION_DATE', '__TCA', 'MISS_DISTANCE',
+        "TIME_TO_TCA",
+        "MAX_RISK_ESTIMATE",
+        "MAX_RISK_SCALING",
+        "MAHALANOBIS_DISTANCE",
+        "MISS_DISTANCE",
+        "C_POSITION_COVARIANCE_DET",
+        "C_OBS_USED"
+    ]
+
+    '''
+    features = [
+        'MISS_DISTANCE',
         'RELATIVE_SPEED', 'RELATIVE_POSITION_R', 'RELATIVE_POSITION_T',
         'RELATIVE_POSITION_N', 'RELATIVE_VELOCITY_R', 'RELATIVE_VELOCITY_T',
         'RELATIVE_VELOCITY_N', 'OBJECT1_X', 'OBJECT1_Y',
@@ -34,11 +45,12 @@ def main():
         'OBJECT2_CNDOT_N', 'OBJECT2_CNDOT_RDOT', 'OBJECT2_CNDOT_TDOT',
         'OBJECT2_CNDOT_NDOT'
     ]
+    '''
 
     model = LSTM(event_dataset, features)
 
     print('Training model...')
-    model.learn(epochs = 10, batch_size = 32, lr = 0.001, val_split = 0.15)
+    model.learn(num_epochs = 10, batch_size = 32, lr = 0.001, val_split = 0.15)
 
     save_path = r"..\results\models\cdm_lstm.pt"
     torch.save(model.state_dict(), save_path)
