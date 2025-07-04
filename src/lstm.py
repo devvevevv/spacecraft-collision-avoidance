@@ -17,7 +17,7 @@ class EventDataset(Dataset):
             for e in event_set:
                 for cdm in e:
                     val = cdm[f]
-                    if not np.isnan(val):
+                    if isinstance(val, (int, float)) and not np.isnan(val):
                         values.append(val)
 
             self._features_stats["mean"].append(np.mean(values))
