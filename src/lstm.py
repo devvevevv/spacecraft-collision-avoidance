@@ -17,7 +17,7 @@ class EventDataset(Dataset):
             for e in event_set:
                 for cdm in e:
                     val = cdm[f]
-                    if isinstance(val, (int, float)) and not np.isnan(val):
+                    if val is not None and isinstance(val, (int, float)) and not np.isnan(val):
                         values.append(val)
 
             self._features_stats["mean"].append(np.mean(values))
@@ -30,14 +30,12 @@ class EventDataset(Dataset):
         e = self._event_set[idx]
         x = torch.zeros(self._max_event_length, self._features_length)
         for j, cdm in enumerate(e):
-            x[j] = torch.tensor(
-                [
-                    (cdm[f] - self._features_stats["mean"][k] + 1e-8)
-                    for k, f in enumerate(self._features)
-                ]
-            )
+            x[j] = torch.tensor([
+                ((cdm[f] if cdm[f] is not None else 0.0) - self._features_stats["mean"][k] + 1e-8)
+                for k, f in enumerate(self._features)
+            ])
 
-            label = 1 if e[-1]["MISS_DISTANCE"]<100 else 0
+            label = 1 if e[-1]["MISS_DISTANCE"] < 100 else 0
 
             return x, torch.tensor(len(e)), torch.tensor(label).float()
 
