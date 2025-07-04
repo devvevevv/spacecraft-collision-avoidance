@@ -86,7 +86,9 @@ class LSTM(nn.Module):
             total_loss = 0
 
             for x, lengths, labels in train_loader:
-                x, lengths, labels = x.to(device), lengths.to(device), labels.to(device)
+                x = x.to(device)
+                lengths = lengths.to(device, dtype=torch.int64)
+                labels = labels.to(device)
                 optimizer.zero_grad()
                 preds = self(x, lengths)
                 loss = criterion(preds, labels)
