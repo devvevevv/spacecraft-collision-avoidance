@@ -29,15 +29,16 @@ class EventDataset(Dataset):
     def __getitem__(self, idx):
         e = self._event_set[idx]
         x = torch.zeros(self._max_event_length, self._features_length)
+
         for j, cdm in enumerate(e):
             x[j] = torch.tensor([
                 ((cdm[f] if cdm[f] is not None else 0.0) - self._features_stats["mean"][k] + 1e-8)
                 for k, f in enumerate(self._features)
             ])
 
-            label = 1 if e[-1]["MISS_DISTANCE"] < 100 else 0
+        label = 1 if e[-1]["MISS_DISTANCE"] < 100 else 0
+        return x, torch.tensor(len(e), dtype=torch.int64), torch.tensor(label).float()
 
-            return x, torch.tensor(len(e)), torch.tensor(label).float()
 
 class LSTM(nn.Module):
     def __init__(self, event_set, features, hidden_size = 64, num_layers = 1, dropout = 0.2):
