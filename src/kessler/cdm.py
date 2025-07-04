@@ -200,7 +200,13 @@ class ConjunctionDataMessage():
                 if idx!=-1:
                     value = util.doy_2_date(value, value[idx:idx+3], value[0:4], idx)
                 try:
-                    _ = datetime.datetime.strptime(value, '%Y-%m-%dT%H:%M:%S.%f')
+                    try:
+                        _ = datetime.datetime.strptime(value, '%Y-%m-%dT%H:%M:%S.%f')
+                    except ValueError:
+                        try:
+                            _ = datetime.datetime.strptime(value, '%Y-%m-%dT%H:%M:%S')
+                        except ValueError as e:
+                            raise RuntimeError('{} ({}) is not in the expected format.\n{}'.format(key, value, str(e)))
                 except Exception as e:
                     raise RuntimeError('{} ({}) is not in the expected format.\n{}'.format(key, value, str(e)))
             self._values_header[key] = value
