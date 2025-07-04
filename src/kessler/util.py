@@ -227,10 +227,9 @@ def lpop_init(tle):
     global pykep_satellite
     #pykep_satellite = pykep.planet.tle(tle[0], tle[1])
 
-
 def lpop_single(target_mjd):
     #return pykep_satellite.eph(pykep.epoch(target_mjd, 'mjd'))
-
+    pass
 
 def lpop_sequence(target_mjds):
     return np.array(list(map(lpop_single, target_mjds)))
