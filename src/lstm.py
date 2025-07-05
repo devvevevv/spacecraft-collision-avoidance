@@ -37,8 +37,7 @@ class EventDataset(Dataset):
             ])
 
         label = 1 if e[-1]["MISS_DISTANCE"] < 100 else 0
-        return x, torch.tensor(len(e), dtype=torch.int64), torch.tensor(label).float()
-
+        return x, torch.tensor(len(e), dtype=torch.int64), torch.tensor(label, dtype=torch.float32)
 
 class LSTM(nn.Module):
     def __init__(self, event_set, features, hidden_size = 64, num_layers = 1, dropout = 0.2):
