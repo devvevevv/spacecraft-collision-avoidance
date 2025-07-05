@@ -11,15 +11,12 @@ class EventDataset(Dataset):
         self._features_length = len(features)
         self._max_event_length = max(len(e) for e in event_set)
 
-        self._features_stats = {"mean":[], "stddev":[]}
+        self._features_stats = {"mean": [], "stddev": []}
         for f in self._features:
-            values = []
-            for e in event_set:
-                for cdm in e:
-                    val = cdm[f]
-                    if val is not None and isinstance(val, (int, float)) and not np.isnan(val):
-                        values.append(val)
-
+            values = [
+                cdm[f] for e in event_set for cdm in e
+                if cdm[f] is not None and isinstance(cdm[f], (int, float)) and not np.isnan(cdm[f])
+            ]
             self._features_stats["mean"].append(np.mean(values))
             self._features_stats["stddev"].append(np.std(values))
 
@@ -39,57 +36,65 @@ class EventDataset(Dataset):
         label = 1 if e[-1]["MISS_DISTANCE"] < 100 else 0
         return x, torch.tensor(len(e), dtype=torch.int64), torch.tensor(label, dtype=torch.float32)
 
+def collate_fn(batch):
+    xs, lengths, labels = zip(*batch)
+    return (
+        torch.stack(xs),
+        torch.tensor(lengths, dtype=torch.int64),
+        torch.tensor(labels, dtype=torch.float32)
+    )
+
 class LSTM(nn.Module):
-    def __init__(self, event_set, features, hidden_size = 64, num_layers = 1, dropout = 0.2):
-        super(LSTM, self).__init__()
-        self._event_set = event_set
+    def __init__(self, event_set, features, hidden_size=64, num_layers=1, dropout=0.2):
+        super().__init__()
         self._features = features
         self._features_length = len(features)
         self.dataset = EventDataset(event_set, features)
         self.hidden_size = hidden_size
+
         self.lstm = nn.LSTM(
-            input_size = self._features_length,
-            hidden_size = hidden_size,
-            num_layers = num_layers,
-            batch_first = True,
-            dropout = dropout
+            input_size=self._features_length,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            batch_first=True,
+            dropout=dropout
         )
         self.fc = nn.Linear(hidden_size, 1)
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, x, lengths):
         lengths = lengths.to("cpu")
-        packed = rnn_utils.pack_padded_sequence(x, lengths, batch_first = True, enforce_sorted = False)
+        packed = rnn_utils.pack_padded_sequence(x, lengths, batch_first=True, enforce_sorted=False)
         packed_out, _ = self.lstm(packed)
-        out, _ = rnn_utils.pad_packed_sequence(packed_out, batch_first = True)
+        out, _ = rnn_utils.pad_packed_sequence(packed_out, batch_first=True)
+
         idx = (lengths - 1).view(-1, 1, 1).expand(-1, 1, self.hidden_size)
         final_outputs = out.gather(1, idx).squeeze(1)
-        logits = self.fc(final_outputs)
-        return logits.squeeze(1)
 
-    def learn(self, num_epochs = 10, batch_size = 32, lr = 0.001, val_split = 0.15):
+        logits = self.fc(final_outputs)
+        return self.sigmoid(logits).squeeze(1)
+
+    def learn(self, num_epochs=10, batch_size=32, lr=0.001, val_split=0.15):
         total_size = len(self.dataset)
         val_size = int(val_split * total_size)
         train_size = total_size - val_size
 
         train_dataset, val_dataset = torch.utils.data.random_split(self.dataset, [train_size, val_size])
-        train_loader = DataLoader(train_dataset, batch_size = batch_size, shuffle = True, drop_last = True)
-        val_loader = DataLoader(val_dataset, batch_size = batch_size, shuffle = False)
+        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=True, collate_fn=collate_fn)
+        val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, collate_fn=collate_fn)
 
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.to(device)
 
-        optimizer = torch.optim.Adam(self.parameters(), lr = lr)
-        criterion = nn.BCEWithLogitsLoss()
+        optimizer = torch.optim.Adam(self.parameters(), lr=lr)
+        criterion = nn.BCELoss()
 
         for epoch in range(num_epochs):
             self.train()
             total_loss = 0
 
             for x, lengths, labels in train_loader:
-                x = x.to(device)
-                lengths = lengths.to(device, dtype=torch.int64)
-                labels = labels.to(device)
+                x, lengths, labels = x.to(device), lengths.to(device), labels.to(device)
                 optimizer.zero_grad()
                 preds = self(x, lengths)
                 loss = criterion(preds, labels)
