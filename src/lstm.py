@@ -66,7 +66,7 @@ class LSTM(nn.Module):
         idx = (lengths - 1).view(-1, 1, 1).expand(-1, 1, self.hidden_size)
         final_outputs = out.gather(1, idx).squeeze(1)
         logits = self.fc(final_outputs)
-        return self.sigmoid(logits).squeeze(1)
+        return logits.squeeze(1)
 
     def learn(self, num_epochs = 10, batch_size = 32, lr = 0.001, val_split = 0.15):
         total_size = len(self.dataset)
@@ -81,7 +81,7 @@ class LSTM(nn.Module):
         self.to(device)
 
         optimizer = torch.optim.Adam(self.parameters(), lr = lr)
-        criterion = nn.BCELoss()
+        criterion = nn.BCEWithLogitsLoss()
 
         for epoch in range(num_epochs):
             self.train()
