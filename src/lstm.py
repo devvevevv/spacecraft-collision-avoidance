@@ -59,10 +59,11 @@ class LSTM(nn.Module):
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, x, lengths):
-        packed = rnn_utils.pack_padded_sequence(x, lengths.cpu, batch_first = True, enforce_sorted = False)
+        lengths = lengths.to("cpu")
+        packed = rnn_utils.pack_padded_sequence(x, lengths, batch_first = True, enforce_sorted = False)
         packed_out, _ = self.lstm(packed)
         out, _ = rnn_utils.pad_packed_sequence(packed_out, batch_first = True)
-        idx = (lengths - 1).view(-1, 1, 1).expand(-1, 1, self.lstm_size)
+        idx = (lengths - 1).view(-1, 1, 1).expand(-1, 1, self.hidden_size)
         final_outputs = out.gather(1, idx).squeeze(1)
         logits = self.fc(final_outputs)
         return self.sigmoid(logits).squeeze(1)
