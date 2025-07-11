@@ -3,6 +3,91 @@ import torch
 from torch import nn, optim
 import torch.nn.utils.rnn as rnn_utils
 from torch.utils.data import Dataset, DataLoader
+from sklearn.preprocessing import StandardScaler
+import joblib
+
+
+class CDMPreprocessor:
+    def __init__(self):
+        self.scaler = StandardScaler()
+        self.is_fitted = False
+
+        self.feature_names = [
+            'MISS_DISTANCE',
+            'RELATIVE_SPEED',
+            'RELATIVE_POSITION_R',
+            'RELATIVE_POSITION_T',
+            'RELATIVE_POSITION_N',
+            'RELATIVE_VELOCITY_R',
+            'RELATIVE_VELOCITY_T',
+            'RELATIVE_VELOCITY_N',
+            'OBJECT1_CR_R',
+            'OBJECT1_CT_T',
+            'OBJECT1_CN_N',
+            'OBJECT2_CR_R'
+        ]
+
+    def extract_features(self, event):
+        features = []
+
+        for cdm in event:
+            cdm_features = []
+            for f in self.feature_names:
+                value = cdm.get(f, 0.0)
+                if value is None:
+                    value = 0.0
+                cdm_features.append(float(value))
+            features.append(cdm_features)
+
+        return np.array(features)
+
+    def fit_transform(self, events):
+        all_features = []
+
+        for event in events:
+            event_features = self.extract_features(event)
+            all_features.extend(event_features)
+
+        all_features = np.array(all_features)
+        self.scaler.fit(all_features)
+        self.is_fitted = True
+
+        sequences = []
+        for event in events:
+            event_features = self.extract_features(event)
+            if len(event_features) > 0:
+                scaled_features = self.scaler.transform(event_features)
+                sequences.append(scaled_features)
+
+        return sequences
+
+    def transform(self, events):
+        if not self.is_fitted:
+            raise RuntimeError("Call fit before transform")
+
+        sequences = []
+        for event in events:
+            event_features = self.extract_features(event)
+            if len(event_features) > 0:
+                scaled_features = self.scaler.transform(event_features)
+                sequences.append(scaled_features)
+
+        return sequences
+
+    def save(self, filepath):
+        joblib.dump(
+            {
+                "scaler": self.scaler,
+                "feature_names": self.feature_names,
+                "is_fitted": self.is_fitted,
+            }, filepath
+        )
+
+    def load(self, filepath):
+        data = joblib.load(filepath)
+        self.scaler = data["scaler"]
+        self.feature_names = data["feature_names"]
+        self.is_fitted = data["is_fitted"]
 
 class EventDataset(Dataset):
     def __init__(self, event_set, features):
