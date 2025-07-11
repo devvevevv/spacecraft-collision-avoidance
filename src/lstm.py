@@ -18,6 +18,8 @@ class CollisionRiskLSTM(nn.Module):
             batch_first = True
         )
 
+        self.attention = nn.Linear(hidden_size, 1)
+
         self.classifier = nn.Sequential(
             nn.Linear(hidden_size, 32),
             nn.ReLU(),
@@ -36,11 +38,11 @@ class CollisionRiskLSTM(nn.Module):
 
         lstm_out, (h_n, c_n) = self.lstm(x, (h_0, c_0))
 
-        final_hidden = h_n[-1]
-        output = self.classifier(final_hidden)
-        return output, None
+        attention_weights = torch.softmax(self.attention(lstm_out), dim = 1)
+        context_vector = torch.sum(attention_weights * lstm_out, dim = 1)
 
-
+        output = self.classifier(context_vector)
+        return output, attention_weights
 
 class CDMPreprocessor:
     def __init__(self):
