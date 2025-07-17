@@ -444,5 +444,20 @@ class ConjunctionDataMessage():
         else:
             raise ValueError('Invalid key: {}'.format(key))
 
+    def get(self, key, default=None):
+        try:
+            return self[key]
+        except (KeyError, ValueError):
+            return default
+
+    def update(self, updates: dict):
+        for key, value in updates.items():
+            try:
+                self[key] = value
+            except ValueError as e:
+                warnings.warn(f"Skipping invalid key '{key}': {e}")
+
+
+
 
 CDM = ConjunctionDataMessage
