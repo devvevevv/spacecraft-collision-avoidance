@@ -159,3 +159,101 @@ def pad_sequences(sequences, max_length=None):
             padded.append(padded_seq)
 
     return np.array(padded)
+
+class CAM:
+    @staticmethod
+    def generate_cam(cdm, delta_v_mag=1.0):
+        new_cdm = cdm.copy()
+
+        cur_pos_r = cdm.get("RELATIVE_POSITION_R", 0.0)
+        cur_pos_t = cdm.get("RELATIVE_POSITION_T", 0.0)
+        cur_pos_n = cdm.get("RELATIVE_POSITION_N", 0.0)
+        cur_vel_r = cdm.get("RELATIVE_VELOCITY_R", 0.0)
+        cur_vel_t = cdm.get("RELATIVE_VELOCITY_T", 0.0)
+        cur_vel_n = cdm.get("RELATIVE_VELOCITY_N", 0.0)
+        cur_miss_dist = cdm.get("MISS_DISTANCE", 0.0)
+
+        pos_mag = np.sqrt(cur_pos_r ** 2 + cur_pos_t ** 2 + cur_pos_n ** 2)
+
+        if pos_mag < 1e-6:
+            pos_mag = 1e-6
+
+        pos_r_norm = cur_pos_r / pos_mag
+        pos_t_norm = cur_pos_t / pos_mag
+        pos_n_norm = cur_pos_n / pos_mag
+
+        if abs(pos_r_norm) >= abs(pos_t_norm) and abs(pos_r_norm) >= abs(pos_n_norm):
+            delta_v_r = 0.0
+            delta_v_t = delta_v_mag if pos_t_norm >= 0 else -delta_v_mag
+            delta_v_n = delta_v_mag * 0.3 if pos_n_norm >= 0 else -delta_v_mag * 0.3
+
+        elif abs(pos_t_norm) >= abs(pos_n_norm):
+            delta_v_r = delta_v_mag if pos_r_norm >= 0 else -delta_v_mag
+            delta_v_t = 0.0
+            delta_v_n = delta_v_mag * 0.3 if pos_n_norm >= 0 else -delta_v_mag * 0.3
+
+        else:
+            delta_v_r = delta_v_mag * 0.7 if pos_r_norm >= 0 else -delta_v_mag * 0.7
+            delta_v_t = delta_v_mag * 0.7 if pos_t_norm >= 0 else -delta_v_mag * 0.7
+            delta_v_n = 0.0
+
+        rel_vel_mag = np.sqrt(cur_vel_r ** 2 + cur_vel_t ** 2 + cur_vel_n ** 2)
+        if rel_vel_mag > 1e-6:
+            time_to_ca = max(pos_mag / rel_vel_mag, 60.0)
+            time_to_ca = min(time_to_ca, 7200.0)
+        else:
+            time_to_ca = 3600.0
+
+        def update_state(sign=1):
+            new_vel = {
+                'r': cur_vel_r + sign * delta_v_r,
+                't': cur_vel_t + sign * delta_v_t,
+                'n': cur_vel_n + sign * delta_v_n,
+            }
+            new_speed = np.sqrt(new_vel['r'] ** 2 + new_vel['t'] ** 2 + new_vel['n'] ** 2)
+
+            dt_hours = time_to_ca / 3600.0
+
+            new_pos = {
+                'r': cur_pos_r + new_vel['r'] * dt_hours,
+                't': cur_pos_t + new_vel['t'] * dt_hours,
+                'n': cur_pos_n + new_vel['n'] * dt_hours
+            }
+
+            new_miss_dist = np.sqrt(new_pos['r'] ** 2 + new_pos['t'] ** 2 + new_pos['n'] ** 2)
+            return new_vel, new_speed, new_pos, new_miss_dist
+
+        new_vel, new_speed, new_pos, new_miss_dist = update_state(sign=1)
+
+        if new_miss_dist <= cur_miss_dist:
+            new_vel_neg, new_speed_neg, new_pos_neg, new_miss_dist_neg = update_state(sign=-1)
+
+            if new_miss_dist_neg > new_miss_dist:
+                new_vel, new_speed, new_pos, new_miss_dist = new_vel_neg, new_speed_neg, new_pos_neg, new_miss_dist_neg
+
+        if new_miss_dist < 500.0:
+            safety_factor = 1000.0 / max(new_miss_dist, 1.0)
+            new_miss_dist = max(new_miss_dist * safety_factor, 1000.0)
+
+            if new_pos:
+                pos_scale = new_miss_dist / np.sqrt(new_pos['r'] ** 2 + new_pos['t'] ** 2 + new_pos['n'] ** 2)
+                new_pos['r'] *= pos_scale
+                new_pos['t'] *= pos_scale
+                new_pos['n'] *= pos_scale
+
+        new_cdm.update({
+            'RELATIVE_VELOCITY_R': new_vel['r'],
+            'RELATIVE_VELOCITY_T': new_vel['t'],
+            'RELATIVE_VELOCITY_N': new_vel['n'],
+            'RELATIVE_SPEED': new_speed,
+            'MISS_DISTANCE': new_miss_dist,
+        })
+
+        if new_pos:
+            new_cdm.update({
+                'RELATIVE_POSITION_R': new_pos['r'],
+                'RELATIVE_POSITION_T': new_pos['t'],
+                'RELATIVE_POSITION_N': new_pos['n'],
+            })
+
+        return new_cdm
